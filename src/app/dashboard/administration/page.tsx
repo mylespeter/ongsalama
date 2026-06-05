@@ -4,7 +4,35 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Home, Users, Stethoscope, FlaskConical, Pill, Activity } from 'lucide-react';
+import { Users, Stethoscope, FlaskConical, Pill, Activity } from 'lucide-react';
+
+// Types pour les données
+type PatientRecent = {
+  id: number;
+  nom: string;
+  post_nom: string;
+  prenom: string;
+  statut: string;
+  created_at: string;
+};
+
+type ConsultationRecent = {
+  id: number;
+  patient_id: number;
+  created_at: string;
+  patients: {
+    nom: string;
+    post_nom: string;
+    prenom: string;
+  } | null;
+};
+
+type ActiviteRecente = {
+  id: number;
+  type: 'patient' | 'consultation';
+  description: string;
+  date: string;
+};
 
 type DashboardStats = {
   totalPatients: number;
@@ -12,12 +40,7 @@ type DashboardStats = {
   totalExamens: number;
   totalPrescriptions: number;
   totalUsers: number;
-  recentActivity: {
-    id: number;
-    type: string;
-    description: string;
-    date: string;
-  }[];
+  recentActivity: ActiviteRecente[];
 };
 
 export default function AdministrationDashboard() {
@@ -80,16 +103,10 @@ export default function AdministrationDashboard() {
       // Récupérer l'activité récente (derniers patients)
       const { data: recentPatients, error: recentError } = await supabase
         .from('patients')
-        .select(`
-          id,
-          nom,
-          post_nom,
-          prenom,
-          statut,
-          created_at
-        `)
+        .select('id, nom, post_nom, prenom, statut, created_at')
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(5)
+        .returns<PatientRecent[]>();
 
       if (recentError) throw recentError;
 
@@ -107,18 +124,19 @@ export default function AdministrationDashboard() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(5)
+        .returns<ConsultationRecent[]>();
 
       if (recentConsultError) throw recentConsultError;
 
       // Combiner les activités récentes
-      const activities = [];
+      const activities: ActiviteRecente[] = [];
 
       if (recentPatients) {
-        recentPatients.forEach(p => {
+        recentPatients.forEach((p: PatientRecent) => {
           activities.push({
             id: p.id,
-            type: 'patient',
+            type: 'patient' as const,
             description: `Nouveau patient : ${p.nom} ${p.post_nom} ${p.prenom}`,
             date: p.created_at,
           });
@@ -126,13 +144,12 @@ export default function AdministrationDashboard() {
       }
 
       if (recentConsultations) {
-        recentConsultations.forEach(c => {
-          const patient = c.patients as any;
-          if (patient) {
+        recentConsultations.forEach((c: ConsultationRecent) => {
+          if (c.patients) {
             activities.push({
               id: c.id,
-              type: 'consultation',
-              description: `Consultation pour ${patient.nom} ${patient.post_nom} ${patient.prenom}`,
+              type: 'consultation' as const,
+              description: `Consultation pour ${c.patients.nom} ${c.patients.post_nom} ${c.patients.prenom}`,
               date: c.created_at,
             });
           }
@@ -140,7 +157,7 @@ export default function AdministrationDashboard() {
       }
 
       // Trier par date et prendre les 5 plus récentes
-      activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      activities.sort((a: ActiviteRecente, b: ActiviteRecente) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const recentActivity = activities.slice(0, 5);
 
       setStats({
@@ -159,7 +176,7 @@ export default function AdministrationDashboard() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     const maintenant = new Date();
     const diffMs = maintenant.getTime() - date.getTime();
@@ -174,7 +191,7 @@ export default function AdministrationDashboard() {
     return date.toLocaleDateString('fr-FR');
   };
 
-  const getActivityIcon = (type: string) => {
+  const getActivityIcon = (type: 'patient' | 'consultation'): React.ReactNode => {
     switch (type) {
       case 'patient':
         return <Users className="h-5 w-5 text-primary" />;
@@ -277,7 +294,7 @@ export default function AdministrationDashboard() {
             <p className="text-gray-500 text-center py-8">Aucune activité récente</p>
           ) : (
             <div className="space-y-4">
-              {stats.recentActivity.map((activity) => (
+              {stats.recentActivity.map((activity: ActiviteRecente) => (
                 <div key={`${activity.type}-${activity.id}`} className="flex items-start space-x-3">
                   <div className="flex-shrink-0 mt-1">
                     {getActivityIcon(activity.type)}
